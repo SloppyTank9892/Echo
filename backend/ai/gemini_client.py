@@ -6,6 +6,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from ai.parse_utils import parse_investigation_response
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -225,18 +226,9 @@ class GeminiClient:
         )
         user = f"Context:\n{json.dumps(context, default=str, separators=(',', ':'))}"
         result = await self.chat(system=system, history=[], user_message=user, mode="analysis")
-        raw = result.text
-        if not raw:
+        if not result.text:
             return {}
-        try:
-            cleaned = raw.strip()
-            if "```" in cleaned:
-                cleaned = cleaned.split("```")[1]
-                if cleaned.startswith("json"):
-                    cleaned = cleaned[4:]
-            return json.loads(cleaned.strip())
-        except json.JSONDecodeError:
-            return {"root_cause": raw[:280]}
+        return parse_investigation_response(result.text)
 
 
 gemini_client = GeminiClient()

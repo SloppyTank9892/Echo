@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Bot, Send, Sparkles, User } from "lucide-react";
+import axios from "axios";
 import { api } from "@/services/api";
 import { Card } from "@/components/ui/Card";
 import type { ChatMessage } from "@/types";
@@ -67,11 +68,18 @@ export function Chat() {
       } else if (data.error_code === "not_configured") {
         setAiReady(false);
       }
-    } catch {
-      setMessages((m) => [
-        ...m,
-        { role: "assistant", content: "Unable to reach ECHO backend. Is the API running?" },
-      ]);
+    } catch (err) {
+      let msg = "Unable to reach ECHO backend. Is the API running on port 8000?";
+      if (axios.isAxiosError(err)) {
+        if (err.code === "ECONNABORTED") {
+          msg = "Request timed out — Gemini is still thinking. Try a shorter question or wait and retry.";
+        } else if (err.response?.data?.detail) {
+          msg = String(err.response.data.detail);
+        } else if (err.response?.status === 500) {
+          msg = "Server error during chat. Restart the backend and try again.";
+        }
+      }
+      setMessages((m) => [...m, { role: "assistant", content: msg }]);
     } finally {
       setLoading(false);
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });

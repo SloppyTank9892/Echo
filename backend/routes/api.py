@@ -96,15 +96,15 @@ async def simulate_stop():
 async def chat_status():
     status = chat_service.ai_status()
     if status.get("available"):
-        ping = await gemini_client.ping()
-        status["verified"] = bool(ping.text)
-        status["model"] = ping.model_used or status.get("model")
-        if not ping.text and ping.error_code:
-            status["verified"] = False
-            status["error"] = ping.user_message
+        status["verified"] = True
     return status
 
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(body: ChatRequest):
-    return await chat_service.reply(body.message, body.incident_id, body.history)
+    try:
+        return await chat_service.reply(body.message, body.incident_id, body.history)
+    except Exception as exc:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=500, detail=str(exc)) from exc

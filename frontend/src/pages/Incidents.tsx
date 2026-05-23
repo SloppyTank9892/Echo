@@ -4,6 +4,7 @@ import { ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import type { Incident } from "@/types";
+import { formatRootCause } from "@/utils/formatIncident";
 
 export function Incidents({ incidents }: { incidents: Incident[] }) {
   return (
@@ -43,7 +44,9 @@ export function Incidents({ incidents }: { incidents: Incident[] }) {
                       </div>
                       <h3 className="font-medium text-slate-200">{inc.title}</h3>
                       {inc.root_cause && (
-                        <p className="mt-1 line-clamp-2 text-sm text-slate-500">{inc.root_cause}</p>
+                        <p className="mt-1 line-clamp-2 text-sm text-slate-500">
+                          {formatRootCause(inc.root_cause)}
+                        </p>
                       )}
                       <p className="mt-2 text-xs text-slate-600">
                         {new Date(inc.created_at).toLocaleString()} ·{" "}

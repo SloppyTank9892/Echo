@@ -9,7 +9,8 @@ import type {
   SystemOverview,
 } from "@/types";
 
-const client = axios.create({ baseURL: "/api" });
+const client = axios.create({ baseURL: "/api", timeout: 30000 });
+const chatClient = axios.create({ baseURL: "/api", timeout: 120000 });
 
 export const api = {
   health: () => client.get("/health"),
@@ -31,5 +32,5 @@ export const api = {
     }>("/simulate/stop"),
   chatStatus: () => client.get<ChatStatus>("/chat/status"),
   chat: (message: string, history: ChatMessage[], incident_id?: string) =>
-    client.post<ChatResponse>("/chat", { message, incident_id, history }),
+    chatClient.post<ChatResponse>("/chat", { message, incident_id, history }),
 };

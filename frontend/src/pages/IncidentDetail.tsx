@@ -6,6 +6,7 @@ import { api } from "@/services/api";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import type { Incident } from "@/types";
+import { formatRootCause } from "@/utils/formatIncident";
 
 export function IncidentDetail() {
   const { id } = useParams<{ id: string }>();
@@ -61,7 +62,7 @@ export function IncidentDetail() {
 
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
         <Card title="AI Root Cause Analysis">
-          <p className="text-slate-300 leading-relaxed">{incident.root_cause}</p>
+          <p className="text-slate-300 leading-relaxed">{formatRootCause(incident.root_cause)}</p>
           <div className="mt-4">
             <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-500">
               Affected Services

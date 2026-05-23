@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from ai.gemini_client import gemini_client
+from ai.parse_utils import flatten_investigation, parse_investigation_response
 from analyzers.anomaly import AnomalyResult
 from models.schemas import Incident, Severity, TimelineEvent
 from services.store import store
@@ -71,12 +72,23 @@ class InvestigationAgent:
             "services": [s.model_dump() for s in store.service_health.values()],
         }
 
-        ai_result = await gemini_client.analyze_incident(context)
+        ai_result = flatten_investigation(await gemini_client.analyze_incident(context))
         fallback = FALLBACK_SCENARIOS.get(anomaly_type, FALLBACK_SCENARIOS["latency_spike"])
 
         root_cause = ai_result.get("root_cause") or fallback["root_cause"]
+        if isinstance(root_cause, dict):
+            root_cause = root_cause.get("root_cause") or fallback["root_cause"]
+        root_cause = str(root_cause).strip()
+        if root_cause.startswith("{"):
+            parsed = parse_investigation_response(root_cause)
+            root_cause = str(parsed.get("root_cause") or fallback["root_cause"])
+
         affected = ai_result.get("affected_services") or fallback["affected_services"]
+        if isinstance(affected, str):
+            affected = [affected]
         remediation = ai_result.get("remediation") or fallback["remediation"]
+        if isinstance(remediation, str):
+            remediation = [remediation]
         severity_str = ai_result.get("severity") or anomaly.severity_hint
 
         severity_map = {
