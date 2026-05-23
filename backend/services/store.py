@@ -1,4 +1,4 @@
-"""In-memory store with optional persistence hooks for demo/hackathon."""
+"""In-memory data store for logs, metrics, service health, and incidents."""
 
 from __future__ import annotations
 
