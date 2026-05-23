@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-echo-bg text-slate-100 antialiased;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply border border-echo-border bg-echo-card/80 backdrop-blur-sm;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  @apply rounded-full bg-slate-700;
+}
