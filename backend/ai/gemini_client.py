@@ -178,8 +178,8 @@ class GeminiClient:
             text = (turn.get("content") or "").strip()
             if not text:
                 continue
-            if role == "model" and len(text) > 1200:
-                text = text[:1200] + "…"
+            if role == "model" and len(text) > 10000:
+                text = text[:10000] + "…"
             contents.append({"role": role, "parts": [text]})
         contents.append({"role": "user", "parts": [user_message]})
 

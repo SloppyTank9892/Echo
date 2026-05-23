@@ -33,6 +33,15 @@ export function Chat() {
                 : "**Gemini is not connected.** Add `GEMINI_API_KEY` to `backend/.env` and restart the API server.",
             },
           ]);
+        } else {
+          const saved = localStorage.getItem("echo_chat_history");
+          if (saved) {
+            try {
+              setMessages(JSON.parse(saved));
+            } catch {
+              setMessages([]);
+            }
+          }
         }
       })
       .catch(() => {
@@ -52,12 +61,15 @@ export function Chat() {
     setInput("");
     const nextMessages: ChatMessage[] = [...messages, { role: "user", content: userMsg }];
     setMessages(nextMessages);
+    localStorage.setItem("echo_chat_history", JSON.stringify(nextMessages));
     setLoading(true);
 
     try {
       const history = messages.filter((m) => m.role === "user" || m.role === "assistant");
       const { data } = await api.chat(userMsg, history);
-      setMessages((m) => [...m, { role: "assistant", content: data.reply }]);
+      const updatedMessages: ChatMessage[] = [...nextMessages, { role: "assistant", content: data.reply }];
+      setMessages(updatedMessages);
+      localStorage.setItem("echo_chat_history", JSON.stringify(updatedMessages));
       if (data.error_code === "quota_exceeded") {
         setQuotaWarning(true);
       } else if (data.error_code === "not_configured") {
@@ -74,7 +86,9 @@ export function Chat() {
           msg = "Server error during chat. Restart the backend and try again.";
         }
       }
-      setMessages((m) => [...m, { role: "assistant", content: msg }]);
+      const errMessages: ChatMessage[] = [...nextMessages, { role: "assistant", content: msg }];
+      setMessages(errMessages);
+      localStorage.setItem("echo_chat_history", JSON.stringify(errMessages));
     } finally {
       setLoading(false);
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -83,11 +97,24 @@ export function Chat() {
 
   return (
     <div className="mx-auto flex h-[calc(100vh-3rem)] max-w-3xl flex-col space-y-4">
-      <header>
-        <h1 className="text-2xl font-bold text-white">AI Incident Assistant</h1>
-        <p className="text-sm text-slate-500">
-          Detailed Gemini analysis grounded in live system data
-        </p>
+      <header className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">AI Incident Assistant</h1>
+          <p className="text-sm text-slate-500">
+            Detailed Gemini analysis grounded in live system data
+          </p>
+        </div>
+        {messages.length > 0 && aiReady === true && (
+          <button
+            onClick={() => {
+              setMessages([]);
+              localStorage.removeItem("echo_chat_history");
+            }}
+            className="rounded-lg border border-slate-700 bg-slate-800/40 px-3 py-1.5 text-xs text-slate-400 hover:border-rose-500/30 hover:text-rose-400 transition-colors"
+          >
+            Clear History
+          </button>
+        )}
       </header>
 
       {aiReady === true && aiModel && (
