@@ -18,6 +18,7 @@ export function Chat() {
   const [loading, setLoading] = useState(false);
   const [aiReady, setAiReady] = useState<boolean | null>(null);
   const [aiModel, setAiModel] = useState<string | null>(null);
+  const [quotaWarning, setQuotaWarning] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -58,7 +59,11 @@ export function Chat() {
       const history = messages.filter((m) => m.role === "user" || m.role === "assistant");
       const { data } = await api.chat(userMsg, history);
       setMessages((m) => [...m, { role: "assistant", content: data.reply }]);
-      if (!data.ai_powered) setAiReady(false);
+      if (data.error_code === "quota_exceeded") {
+        setQuotaWarning(true);
+      } else if (data.error_code === "not_configured") {
+        setAiReady(false);
+      }
     } catch {
       setMessages((m) => [
         ...m,
@@ -89,6 +94,13 @@ export function Chat() {
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
           Set <code className="text-amber-200">GEMINI_API_KEY</code> in backend/.env and restart
           uvicorn to enable real AI responses.
+        </div>
+      )}
+      {quotaWarning && (
+        <div className="rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs text-orange-200">
+          Gemini free-tier quota hit. Answers use live incident data. Add{" "}
+          <code className="text-orange-100">GEMINI_MODEL=gemini-1.5-flash</code> to backend/.env or
+          retry in ~1 minute.
         </div>
       )}
 

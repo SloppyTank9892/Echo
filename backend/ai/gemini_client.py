@@ -3,19 +3,51 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from config import settings
 
 logger = logging.getLogger(__name__)
 
+# 1.5-flash first — free tier quota is often higher than 2.0-flash
 MODEL_CANDIDATES = (
-    "gemini-2.0-flash",
     "gemini-1.5-flash",
+    "gemini-2.0-flash",
     "gemini-1.5-pro",
 )
 
 Mode = Literal["chat", "analysis"]
+
+
+@dataclass
+class GeminiResult:
+    text: str = ""
+    error_code: str | None = None
+    user_message: str | None = None
+    model_used: str | None = None
+
+
+def _is_quota_error(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    return any(
+        token in msg
+        for token in ("429", "quota", "resource_exhausted", "rate limit", "rate_limit")
+    )
+
+
+def _friendly_error(exc: BaseException) -> tuple[str, str]:
+    """Returns (error_code, user_message)."""
+    if _is_quota_error(exc):
+        return (
+            "quota_exceeded",
+            "Gemini free-tier quota is used up for now. Try again in a few minutes, "
+            "or switch to **gemini-1.5-flash** in `backend/.env` (`GEMINI_MODEL=gemini-1.5-flash`). "
+            "ECHO will still answer from live incident data below.",
+        )
+    if "api key" in str(exc).lower() or "invalid" in str(exc).lower():
+        return ("invalid_key", "Invalid API key. Check `GEMINI_API_KEY` in `backend/.env`.")
+    return ("api_error", "AI is temporarily unavailable. Using live platform data instead.")
 
 
 class GeminiClient:
@@ -32,7 +64,15 @@ class GeminiClient:
             import google.generativeai as genai
 
             genai.configure(api_key=settings.gemini_api_key)
-            for name in MODEL_CANDIDATES:
+            preferred = getattr(settings, "gemini_model", "") or ""
+            candidates = (
+                [preferred] + [m for m in MODEL_CANDIDATES if m != preferred]
+                if preferred
+                else list(MODEL_CANDIDATES)
+            )
+            for name in candidates:
+                if not name:
+                    continue
                 try:
                     genai.GenerativeModel(name)
                     self._model_name = name
@@ -57,6 +97,17 @@ class GeminiClient:
             "error": self._init_error,
         }
 
+    def _models_to_try(self) -> list[str]:
+        preferred = getattr(settings, "gemini_model", "") or ""
+        primary = self._model_name or MODEL_CANDIDATES[0]
+        ordered = [primary]
+        if preferred and preferred not in ordered:
+            ordered.insert(0, preferred)
+        for m in MODEL_CANDIDATES:
+            if m not in ordered:
+                ordered.append(m)
+        return ordered
+
     def _generation_config(self, mode: Mode):
         import google.generativeai as genai
 
@@ -71,17 +122,36 @@ class GeminiClient:
             top_p=0.9,
         )
 
-    def _create_model(self, system: str):
+    def _create_model(self, model_name: str, system: str):
         import google.generativeai as genai
 
-        return genai.GenerativeModel(
-            self._model_name or MODEL_CANDIDATES[0],
-            system_instruction=system,
-        )
+        return genai.GenerativeModel(model_name, system_instruction=system)
+
+    async def _generate_with_model(
+        self,
+        model_name: str,
+        system: str,
+        contents: list[dict[str, Any]],
+        mode: Mode,
+    ) -> str:
+        import google.generativeai as genai
+
+        model = self._create_model(model_name, system)
+        config = self._generation_config(mode)
+        fn = getattr(model, "generate_content_async", None)
+        if fn:
+            response = await fn(contents, generation_config=config)
+        else:
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: model.generate_content(contents, generation_config=config),
+            )
+        return (response.text or "").strip()
 
     async def generate(self, system: str, user: str, mode: Mode = "chat") -> str:
-        text, _ = await self.chat(system=system, history=[], user_message=user, mode=mode)
-        return text
+        result = await self.chat(system=system, history=[], user_message=user, mode=mode)
+        return result.text
 
     async def chat(
         self,
@@ -89,9 +159,12 @@ class GeminiClient:
         history: list[dict[str, str]],
         user_message: str,
         mode: Mode = "chat",
-    ) -> tuple[str, str | None]:
+    ) -> GeminiResult:
         if not self.available:
-            return "", self._init_error or "Gemini is not configured"
+            return GeminiResult(
+                error_code="not_configured",
+                user_message=self._init_error or "Gemini is not configured",
+            )
 
         contents: list[dict[str, Any]] = []
         for turn in history[-8:]:
@@ -104,25 +177,29 @@ class GeminiClient:
             contents.append({"role": role, "parts": [text]})
         contents.append({"role": "user", "parts": [user_message]})
 
-        try:
-            model = self._create_model(system)
-            config = self._generation_config(mode)
-            fn = getattr(model, "generate_content_async", None)
-            if fn:
-                response = await fn(contents, generation_config=config)
-            else:
-                loop = asyncio.get_event_loop()
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: model.generate_content(contents, generation_config=config),
-                )
-            text = (response.text or "").strip()
-            if text:
-                return text, None
-            return "", "Gemini returned an empty response"
-        except Exception as exc:
-            logger.exception("Gemini chat failed")
-            return "", str(exc)
+        last_quota = False
+        for model_name in self._models_to_try():
+            try:
+                text = await self._generate_with_model(model_name, system, contents, mode)
+                if text:
+                    self._model_name = model_name
+                    return GeminiResult(text=text, model_used=model_name)
+            except Exception as exc:
+                logger.warning("Gemini %s failed: %s", model_name, exc)
+                if _is_quota_error(exc):
+                    last_quota = True
+                    continue
+                code, msg = _friendly_error(exc)
+                return GeminiResult(error_code=code, user_message=msg)
+
+        if last_quota:
+            code, msg = _friendly_error(Exception("429 quota"))
+            return GeminiResult(error_code=code, user_message=msg)
+
+        return GeminiResult(
+            error_code="empty_response",
+            user_message="AI returned no content. Using live platform data instead.",
+        )
 
     async def analyze_incident(self, context: dict[str, Any]) -> dict[str, Any]:
         system = (
@@ -132,7 +209,8 @@ class GeminiClient:
             "remediation (max 4 short action strings). No markdown, no prose outside JSON."
         )
         user = f"Context:\n{json.dumps(context, default=str, separators=(',', ':'))}"
-        raw, _ = await self.chat(system=system, history=[], user_message=user, mode="analysis")
+        result = await self.chat(system=system, history=[], user_message=user, mode="analysis")
+        raw = result.text
         if not raw:
             return {}
         try:

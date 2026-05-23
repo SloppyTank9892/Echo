@@ -68,6 +68,7 @@ export interface ChatResponse {
   reply: string;
   sources: string[];
   ai_powered: boolean;
+  error_code?: string | null;
 }
 
 export interface ChatStatus {

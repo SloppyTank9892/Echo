@@ -76,6 +76,48 @@ class ChatService:
             "fix": (inc.get("remediation") or ["Investigate logs"])[0],
         }
 
+    def _local_context_answer(self, message: str, context: dict) -> str:
+        """Concise fallback from live store when Gemini is unavailable."""
+        inc = context.get("focused_incident")
+        msg = message.lower()
+        degraded = [s["name"] for s in context.get("services", []) if s.get("status") != "healthy"]
+
+        if inc:
+            services = ", ".join(inc.get("services") or []) or "affected services"
+            if any(w in msg for w in ("timeout", "cause", "why", "fail", "what", "api")):
+                return (
+                    f"**{services}** — {inc.get('root_cause', 'No root cause on file.')}\n"
+                    f"**Do first:** {inc.get('fix', 'Open Incidents for full timeline.')}"
+                )
+            return (
+                f"Active incident **#{inc.get('id')}** ({inc.get('severity')}): "
+                f"{inc.get('title', 'Unknown')}. "
+                f"Root cause: {inc.get('root_cause', 'n/a')}"
+            )
+
+        if any(w in msg for w in ("unstable", "which service", "down", "degraded")):
+            if degraded:
+                return f"Unstable now: **{', '.join(degraded)}**. Active incidents: {context.get('active_incidents', 0)}."
+            return "All monitored services report **healthy**."
+
+        timeout_logs = [
+            line for line in context.get("recent_logs", [])
+            if "timeout" in line.lower() or "circuit" in line.lower()
+        ]
+        if timeout_logs and "timeout" in msg:
+            return f"Latest signal: {timeout_logs[0]}\nCheck **Incidents** after running a simulation."
+
+        if context.get("recent_incidents"):
+            top = context["recent_incidents"][0]
+            return (
+                f"No active incident. Latest: **{top.get('title', 'n/a')}** — "
+                f"{top.get('root_cause', 'Run Simulation to generate data.')}"
+            )
+
+        return (
+            "No incident data yet. Use **Simulation** → API Timeout, then ask again."
+        )
+
     async def reply(
         self,
         message: str,
@@ -95,26 +137,40 @@ class ChatService:
                 ),
                 sources=[],
                 ai_powered=False,
+                error_code="not_configured",
             )
 
         context_json = json.dumps(context, separators=(",", ":"))
         system = f"{ECHO_SYSTEM_PROMPT}\n\nLIVE CONTEXT:\n{context_json}"
         history_payload = [{"role": m.role, "content": m.content} for m in (history or [])]
 
-        text, error = await gemini_client.chat(
+        result = await gemini_client.chat(
             system=system,
             history=history_payload,
             user_message=message.strip(),
             mode="chat",
         )
 
-        if text:
-            return ChatResponse(reply=text, sources=sources, ai_powered=True)
+        if result.text:
+            return ChatResponse(
+                reply=result.text,
+                sources=sources,
+                ai_powered=True,
+                error_code=None,
+            )
+
+        fallback = self._local_context_answer(message, context)
+        prefix = ""
+        if result.error_code == "quota_exceeded":
+            prefix = "_Gemini quota reached — answer from live data:_\n\n"
+        elif result.user_message:
+            prefix = f"_{result.user_message}_\n\n"
 
         return ChatResponse(
-            reply=f"Gemini error: {error or 'unknown'}. Check your API key and restart the backend.",
-            sources=sources,
+            reply=f"{prefix}{fallback}".strip(),
+            sources=sources + ["local_fallback"],
             ai_powered=False,
+            error_code=result.error_code,
         )
 
     def ai_status(self) -> dict:

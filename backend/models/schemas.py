@@ -91,3 +91,4 @@ class ChatResponse(BaseModel):
     reply: str
     sources: list[str] = Field(default_factory=list)
     ai_powered: bool = True
+    error_code: Optional[str] = None

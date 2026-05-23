@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     gemini_api_key: str = ""
+    gemini_model: str = "gemini-1.5-flash"
     gemini_chat_max_tokens: int = 256
     gemini_analysis_max_tokens: int = 512
     gemini_temperature: float = 0.25
