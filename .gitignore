@@ -1,5 +1,15 @@
-# Python
+# Secrets & environment (never commit real keys)
+.env
+.env.*
+!.env.example
 backend/.env
+backend/.env.local
+backend/.env.*.local
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+
+# Python
 backend/__pycache__/
 backend/**/__pycache__/
 backend/*.db

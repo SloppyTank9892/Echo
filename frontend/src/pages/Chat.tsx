@@ -30,7 +30,7 @@ export function Chat() {
           {
             role: "assistant",
             content: data.available
-              ? `I'm ECHO, powered by **${data.model}**. I use live logs, metrics, and incidents to answer your questions. Trigger a simulation first, then ask me anything about the outage.`
+              ? `ECHO (${data.model}) — short, context-aware answers from live logs and incidents. Run a simulation first, then ask your question.`
               : "**Gemini is not connected.** Add `GEMINI_API_KEY` to `backend/.env` and restart the API server. Get a key at https://aistudio.google.com/apikey",
           },
         ]);
@@ -75,7 +75,7 @@ export function Chat() {
       <header>
         <h1 className="text-2xl font-bold text-white">AI Incident Assistant</h1>
         <p className="text-sm text-slate-500">
-          Powered by Google Gemini — answers use live system context
+          Concise Gemini responses grounded in live system data
         </p>
       </header>
 
@@ -141,7 +141,7 @@ export function Chat() {
             </motion.div>
           ))}
           {loading && (
-            <p className="text-center text-xs text-cyan-500/80">Gemini is analyzing live context…</p>
+            <p className="text-center text-xs text-cyan-500/80">Thinking…</p>
           )}
           <div ref={bottomRef} />
         </div>
