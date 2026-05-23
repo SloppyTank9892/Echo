@@ -222,7 +222,9 @@ class GeminiClient:
             "ECHO SRE analyst. Return ONLY compact JSON: "
             "root_cause (max 2 sentences), severity (low|medium|high|critical), "
             "affected_services (string array), timeline (max 5 items with timestamp, description), "
-            "remediation (max 4 short action strings). No markdown, no prose outside JSON."
+            "remediation (max 4 short action strings), "
+            "correlation (1 sentence explaining potential correlated failures, e.g. 'Database degradation likely triggered payment-api instability', or null if none)."
+            " No markdown, no prose outside JSON."
         )
         user = f"Context:\n{json.dumps(context, default=str, separators=(',', ':'))}"
         result = await self.chat(system=system, history=[], user_message=user, mode="analysis")

@@ -19,6 +19,7 @@ FALLBACK_SCENARIOS: dict[str, dict] = {
             "Increase upstream timeout thresholds temporarily",
             "Enable circuit breaker on checkout-service",
         ],
+        "correlation": "Upstream payment-api slowdown caused cascading timeout in checkout-service.",
     },
     "error_rate": {
         "root_cause": "Elevated 5xx responses due to unhandled exceptions in payment-api after schema migration.",
@@ -28,6 +29,7 @@ FALLBACK_SCENARIOS: dict[str, dict] = {
             "Restart payment-api pods",
             "Validate API contract tests",
         ],
+        "correlation": "Traffic spike on payment-api triggered error rate spike cascade.",
     },
     "database_timeout": {
         "root_cause": "PostgreSQL connection pool exhaustion caused by unclosed sessions after deployment v1.2.4.",
@@ -37,6 +39,7 @@ FALLBACK_SCENARIOS: dict[str, dict] = {
             "Close idle DB sessions",
             "Roll back deployment v1.2.4",
         ],
+        "correlation": "Database degradation likely triggered payment-api connection timeouts.",
     },
     "auth_failures": {
         "root_cause": "Authentication token expiration misconfiguration after auth-gateway config change.",
@@ -46,6 +49,7 @@ FALLBACK_SCENARIOS: dict[str, dict] = {
             "Rotate signing keys",
             "Invalidate stale sessions",
         ],
+        "correlation": "auth-gateway failure blocked token validation in downstream payment-api.",
     },
     "throughput_drop": {
         "root_cause": "Memory pressure on inventory-api causing GC pauses and request throttling.",
@@ -55,6 +59,7 @@ FALLBACK_SCENARIOS: dict[str, dict] = {
             "Restart affected service",
             "Review heap dump for leaks",
         ],
+        "correlation": "inventory-api heap exhaustion caused request timeouts in checkout-service.",
     },
 }
 
@@ -101,6 +106,7 @@ class InvestigationAgent:
 
         timeline = self._build_timeline(now, anomaly_type, ai_result.get("timeline"))
         incident_id = str(uuid.uuid4())[:8]
+        correlation = ai_result.get("correlation") or fallback.get("correlation")
 
         incident = Incident(
             id=incident_id,
@@ -114,6 +120,7 @@ class InvestigationAgent:
             related_logs=trigger_logs[:15],
             created_at=now,
             anomaly_type=anomaly_type,
+            correlation=correlation,
         )
         store.add_incident(incident)
         return incident

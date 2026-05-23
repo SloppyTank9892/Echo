@@ -73,10 +73,10 @@ SIMULATION_PROFILES: dict[str, dict] = {
             ("auth-gateway", "INFO", "Traffic spike detected: 3.2x baseline"),
             ("payment-api", "ERROR", "503 Service Unavailable - capacity exceeded"),
         ],
-        "metrics": {"latency_ms": 310, "error_rate": 7.1, "throughput": 45, "uptime_percent": 97.0},
+        "metrics": {"latency_ms": 620, "error_rate": 18.5, "throughput": 1450, "uptime_percent": 93.0},
         "services": {
-            "payment-api": {"status": ServiceStatus.DEGRADED, "latency_ms": 350, "error_rate": 9.0},
-            "auth-gateway": {"status": ServiceStatus.DEGRADED, "latency_ms": 280, "error_rate": 5.0},
+            "payment-api": {"status": ServiceStatus.DEGRADED, "latency_ms": 750, "error_rate": 24.0},
+            "auth-gateway": {"status": ServiceStatus.DEGRADED, "latency_ms": 580, "error_rate": 12.0},
         },
         "anomaly_type": "error_rate",
     },
@@ -214,19 +214,7 @@ class EventSimulator:
         await ws_manager.broadcast("metric", point.model_dump())
         await ws_manager.broadcast("overview", self._overview_dict())
 
-        anomaly = anomaly_detector.evaluate(point)
-        if store.simulation_active:
-            return
 
-        if anomaly.detected and len(store.active_incidents()) == 0:
-            logs = [f"[{l.service}] {l.message}" for l in list(store.logs)[:15]]
-            incident = await investigation_agent.investigate(anomaly, logs)
-            await ws_manager.broadcast("incident", incident.model_dump())
-            await ws_manager.broadcast("alert", {
-                "title": incident.title,
-                "severity": incident.severity.value,
-                "incident_id": incident.id,
-            })
 
     def _overview_dict(self) -> dict:
         services = list(store.service_health.values())

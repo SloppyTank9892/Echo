@@ -34,6 +34,7 @@ export interface Incident {
   related_logs: string[];
   created_at: string;
   anomaly_type?: string;
+  correlation?: string;
 }
 
 export interface ServiceHealth {

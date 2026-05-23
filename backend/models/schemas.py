@@ -53,6 +53,7 @@ class Incident(BaseModel):
     created_at: datetime
     resolved_at: Optional[datetime] = None
     anomaly_type: Optional[str] = None
+    correlation: Optional[str] = None
 
 
 class ServiceHealth(BaseModel):

@@ -63,6 +63,18 @@ export function IncidentDetail() {
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
         <Card title="AI Root Cause Analysis">
           <p className="text-slate-300 leading-relaxed">{formatRootCause(incident.root_cause)}</p>
+
+          {incident.correlation && (
+            <div className="mt-4 rounded-xl border border-purple-500/20 bg-purple-950/20 p-4 shadow-sm shadow-purple-500/5">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-purple-400">
+                Correlation Analysis
+              </p>
+              <p className="text-sm text-purple-200 leading-relaxed">
+                {incident.correlation}
+              </p>
+            </div>
+          )}
+
           <div className="mt-4">
             <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-500">
               Affected Services

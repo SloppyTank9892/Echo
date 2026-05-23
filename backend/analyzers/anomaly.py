@@ -16,8 +16,8 @@ class AnomalyResult:
 
 
 class AnomalyDetector:
-    LATENCY_THRESHOLD_MS = 200.0
-    ERROR_RATE_THRESHOLD = 5.0
+    LATENCY_THRESHOLD_MS = 500.0
+    ERROR_RATE_THRESHOLD = 10.0
     THROUGHPUT_DROP_RATIO = 0.4
 
     def evaluate(self, point: MetricPoint) -> AnomalyResult:
