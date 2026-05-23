@@ -76,10 +76,20 @@ async def resolve_incident(incident_id: str):
     return updated
 
 
+@router.get("/simulate/status")
+async def simulate_status():
+    return event_simulator.status()
+
+
 @router.post("/simulate")
 async def simulate(body: SimulateRequest):
     result = await event_simulator.run(body.event_type)
     return result
+
+
+@router.post("/simulate/stop")
+async def simulate_stop():
+    return await event_simulator.stop()
 
 
 @router.get("/chat/status")

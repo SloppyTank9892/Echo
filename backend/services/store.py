@@ -24,6 +24,8 @@ class DataStore:
         self.metrics: deque[MetricPoint] = deque(maxlen=120)
         self.incidents: dict[str, Incident] = {}
         self.service_health: dict[str, ServiceHealth] = {}
+        self.simulation_active: bool = False
+        self.simulation_type: str | None = None
         self._init_services()
 
     def _init_services(self) -> None:
@@ -70,6 +72,20 @@ class DataStore:
             return
         current = self.service_health[name]
         self.service_health[name] = current.model_copy(update=kwargs)
+
+    def reset_services_healthy(self) -> None:
+        self._init_services()
+
+    def resolve_all_active_incidents(self) -> int:
+        now = datetime.now(timezone.utc)
+        count = 0
+        for inc_id, inc in list(self.incidents.items()):
+            if inc.status == "active":
+                self.incidents[inc_id] = inc.model_copy(
+                    update={"status": "resolved", "resolved_at": now}
+                )
+                count += 1
+        return count
 
 
 store = DataStore()

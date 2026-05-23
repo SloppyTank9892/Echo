@@ -32,7 +32,7 @@ export function Chat() {
           {
             role: "assistant",
             content: live
-              ? `ECHO (${data.model}) — short, context-aware answers from live logs and incidents. Run a simulation first, then ask your question.`
+              ? `ECHO (${data.model}) — detailed answers from live logs, metrics, and incidents. Run a simulation first, then ask your question.`
               : data.available
                 ? `Gemini key is set but the model could not be reached (${data.error || "check GEMINI_MODEL"}). Set \`GEMINI_MODEL=gemini-2.5-flash\` in backend/.env and restart.`
                 : "**Gemini is not connected.** Add `GEMINI_API_KEY` to `backend/.env` and restart the API server.",
@@ -83,7 +83,7 @@ export function Chat() {
       <header>
         <h1 className="text-2xl font-bold text-white">AI Incident Assistant</h1>
         <p className="text-sm text-slate-500">
-          Concise Gemini responses grounded in live system data
+          Detailed Gemini analysis grounded in live system data
         </p>
       </header>
 
@@ -145,7 +145,7 @@ export function Chat() {
               </div>
               <div
                 className={cn(
-                  "max-w-[85%] whitespace-pre-wrap rounded-xl px-4 py-2.5 text-sm leading-relaxed",
+                  "max-w-[90%] whitespace-pre-wrap rounded-xl px-4 py-2.5 text-sm leading-relaxed",
                   msg.role === "assistant"
                     ? "bg-slate-800/80 text-slate-300"
                     : "bg-cyan-600/20 text-slate-200"

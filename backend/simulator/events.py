@@ -128,7 +128,61 @@ class EventSimulator:
             "incident_id": incident.id,
         })
 
+        store.simulation_active = True
+        store.simulation_type = event_type
+        await ws_manager.broadcast(
+            "simulation",
+            {"active": True, "event_type": event_type, "incident_id": incident.id},
+        )
+
         return {"ok": True, "incident_id": incident.id, "event_type": event_type}
+
+    async def stop(self) -> dict:
+        if not store.simulation_active:
+            return {"ok": True, "message": "No simulation is running", "active": False}
+
+        event_type = store.simulation_type
+        resolved = store.resolve_all_active_incidents()
+        store.reset_services_healthy()
+
+        recovery = store.add_log(
+            "notification-service",
+            "INFO",
+            f"Simulation stopped ({event_type or 'unknown'}). All services restored to healthy baseline.",
+        )
+        await ws_manager.broadcast("log", recovery.model_dump())
+
+        now = datetime.now(timezone.utc)
+        point = MetricPoint(
+            timestamp=now,
+            latency_ms=52.0,
+            error_rate=0.4,
+            throughput=580,
+            uptime_percent=99.95,
+        )
+        store.add_metric(point)
+        await ws_manager.broadcast("metric", point.model_dump())
+
+        for s in store.service_health.values():
+            await ws_manager.broadcast("service_health", s.model_dump())
+
+        store.simulation_active = False
+        store.simulation_type = None
+        await ws_manager.broadcast("overview", self._overview_dict())
+        await ws_manager.broadcast("simulation", {"active": False, "event_type": None})
+
+        return {
+            "ok": True,
+            "active": False,
+            "resolved_incidents": resolved,
+            "message": "Simulation stopped. Services and metrics restored.",
+        }
+
+    def status(self) -> dict:
+        return {
+            "active": store.simulation_active,
+            "event_type": store.simulation_type,
+        }
 
     async def tick_baseline(self) -> None:
         """Emit healthy baseline metrics/logs for live dashboard."""
@@ -161,6 +215,9 @@ class EventSimulator:
         await ws_manager.broadcast("overview", self._overview_dict())
 
         anomaly = anomaly_detector.evaluate(point)
+        if store.simulation_active:
+            return
+
         if anomaly.detected and len(store.active_incidents()) == 0:
             logs = [f"[{l.service}] {l.message}" for l in list(store.logs)[:15]]
             incident = await investigation_agent.investigate(anomaly, logs)

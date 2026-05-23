@@ -7,25 +7,27 @@ from ai.gemini_client import gemini_client
 from models.schemas import ChatMessage, ChatResponse
 from services.store import store
 
-ECHO_SYSTEM_PROMPT = """You are ECHO, a concise SRE copilot on a live API monitoring dashboard.
+ECHO_SYSTEM_PROMPT = """You are ECHO, an expert SRE copilot on a live API monitoring dashboard.
 
-STRICT OUTPUT RULES:
-- Default: 2–4 short sentences OR up to 4 bullet points (pick one format).
-- Hard cap: 80 words unless the user explicitly asks for detail.
-- Lead with the direct answer, then one supporting fact from context (service, log, or metric).
-- No greetings, no filler ("I'd be happy to…"), no repeating the question.
-- Use **bold** only for service names or severity. No headers or long lists.
-- Only use facts from LIVE CONTEXT below. If unknown, say what is missing in one line.
-
-Follow-up questions: stay brief; do not re-summarize the whole system."""
+RESPONSE STYLE:
+- Give complete, helpful answers (roughly 120–250 words unless the user asks for a one-liner).
+- Structure longer answers clearly:
+  1) **What happened** — direct answer to the question
+  2) **Evidence** — cite specific services, log lines, metrics, or incident fields from context
+  3) **Impact** — which services/users are affected
+  4) **What to do next** — 2–4 concrete remediation steps from context when available
+- Use markdown: **bold** for services, bullet lists for steps, short paragraphs.
+- No filler greetings. Do not repeat the user's question verbatim.
+- Only use facts from LIVE CONTEXT. If something is missing, state what data you would need.
+- On follow-ups, build on the conversation without re-explaining the entire platform from scratch."""
 
 
 class ChatService:
     def _compact_context(self, incident_id: str | None = None) -> dict:
         active = store.active_incidents()
-        incidents = store.list_incidents(3)
-        logs = list(store.logs)[:12]
-        metrics = list(store.metrics)[-5:]
+        incidents = store.list_incidents(5)
+        logs = list(store.logs)[:25]
+        metrics = list(store.metrics)[-10:]
 
         focused = None
         if incident_id:
@@ -59,21 +61,38 @@ class ChatService:
             "focused_incident": focused,
             "recent_incidents": [self._incident_summary(i.model_dump()) for i in incidents],
             "recent_logs": [
-                f"[{log.service}] {log.level}: {log.message[:120]}"
+                f"[{log.service}] {log.level}: {log.message[:200]}"
                 for log in logs
             ],
             "metrics": metrics_summary,
+            "metrics_history": [
+                {
+                    "latency_ms": round(m.latency_ms, 1),
+                    "error_rate_pct": round(m.error_rate, 2),
+                    "throughput": m.throughput,
+                }
+                for m in metrics[-6:]
+            ],
+            "simulation_active": store.simulation_active,
+            "simulation_type": store.simulation_type,
         }
 
     @staticmethod
     def _incident_summary(inc: dict) -> dict:
+        timeline = inc.get("timeline") or []
         return {
             "id": inc.get("id"),
             "severity": inc.get("severity"),
-            "title": (inc.get("title") or "")[:100],
-            "root_cause": (inc.get("root_cause") or "")[:200],
-            "services": inc.get("affected_services", [])[:4],
-            "fix": (inc.get("remediation") or ["Investigate logs"])[0],
+            "status": inc.get("status"),
+            "title": inc.get("title") or "",
+            "root_cause": inc.get("root_cause") or "",
+            "affected_services": inc.get("affected_services", []),
+            "remediation": inc.get("remediation", []),
+            "timeline": [
+                {"time": t.get("timestamp"), "event": t.get("description")}
+                for t in timeline[:8]
+            ],
+            "related_logs": (inc.get("related_logs") or [])[:8],
         }
 
     def _local_context_answer(self, message: str, context: dict) -> str:
@@ -83,16 +102,18 @@ class ChatService:
         degraded = [s["name"] for s in context.get("services", []) if s.get("status") != "healthy"]
 
         if inc:
-            services = ", ".join(inc.get("services") or []) or "affected services"
-            if any(w in msg for w in ("timeout", "cause", "why", "fail", "what", "api")):
-                return (
-                    f"**{services}** — {inc.get('root_cause', 'No root cause on file.')}\n"
-                    f"**Do first:** {inc.get('fix', 'Open Incidents for full timeline.')}"
-                )
+            services = ", ".join(inc.get("affected_services") or []) or "affected services"
+            fixes = inc.get("remediation") or []
+            fix_text = "\n".join(f"- {f}" for f in fixes[:4]) if fixes else "- See Incidents tab"
+            timeline = inc.get("timeline") or []
+            tl_text = "\n".join(
+                f"- {t.get('event', '')}" for t in timeline[:5]
+            ) if timeline else "- See incident timeline"
             return (
-                f"Active incident **#{inc.get('id')}** ({inc.get('severity')}): "
-                f"{inc.get('title', 'Unknown')}. "
-                f"Root cause: {inc.get('root_cause', 'n/a')}"
+                f"**What happened:** {inc.get('root_cause', 'No root cause on file.')}\n\n"
+                f"**Affected:** {services} (severity: {inc.get('severity')})\n\n"
+                f"**Timeline:**\n{tl_text}\n\n"
+                f"**Recommended actions:**\n{fix_text}"
             )
 
         if any(w in msg for w in ("unstable", "which service", "down", "degraded")):

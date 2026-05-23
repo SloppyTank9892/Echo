@@ -19,7 +19,16 @@ export const api = {
   incidents: () => client.get<Incident[]>("/incidents"),
   incident: (id: string) => client.get<Incident>(`/incidents/${id}`),
   resolveIncident: (id: string) => client.post(`/incidents/${id}/resolve`),
+  simulateStatus: () =>
+    client.get<{ active: boolean; event_type: string | null }>("/simulate/status"),
   simulate: (event_type: string) => client.post("/simulate", { event_type }),
+  simulateStop: () =>
+    client.post<{
+      ok: boolean;
+      active: boolean;
+      message?: string;
+      resolved_incidents?: number;
+    }>("/simulate/stop"),
   chatStatus: () => client.get<ChatStatus>("/chat/status"),
   chat: (message: string, history: ChatMessage[], incident_id?: string) =>
     client.post<ChatResponse>("/chat", { message, incident_id, history }),
