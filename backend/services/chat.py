@@ -161,7 +161,7 @@ class ChatService:
                 error_code="not_configured",
             )
 
-        context_json = json.dumps(context, separators=(",", ":"))
+        context_json = json.dumps(context, default=str, separators=(",", ":"))
         system = f"{ECHO_SYSTEM_PROMPT}\n\nLIVE CONTEXT:\n{context_json}"
         history_payload = [{"role": m.role, "content": m.content} for m in (history or [])]
 

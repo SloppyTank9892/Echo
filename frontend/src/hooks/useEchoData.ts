@@ -59,5 +59,9 @@ export function useEchoData() {
     };
   }, [refresh]);
 
-  return { overview, metrics, logs, incidents, alerts, refresh };
+  const removeAlert = useCallback((incidentId: string) => {
+    setAlerts((prev) => prev.filter((a) => a.incident_id !== incidentId));
+  }, []);
+
+  return { overview, metrics, logs, incidents, alerts, refresh, removeAlert };
 }

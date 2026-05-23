@@ -9,12 +9,12 @@ import { Incidents } from "@/pages/Incidents";
 import { Settings } from "@/pages/Settings";
 
 export default function App() {
-  const { overview, metrics, logs, incidents, alerts } = useEchoData();
+  const { overview, metrics, logs, incidents, alerts, removeAlert } = useEchoData();
   const activeCount = incidents.filter((i) => i.status === "active").length;
 
   return (
     <>
-      <AlertToast alerts={alerts} />
+      <AlertToast alerts={alerts} onRemove={removeAlert} />
       <Routes>
         <Route element={<AppLayout />}>
           <Route

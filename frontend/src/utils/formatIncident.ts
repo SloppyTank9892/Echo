@@ -14,5 +14,8 @@ export function formatRootCause(raw: string | undefined | null): string {
   const match = text.match(/"root_cause"\s*:\s*"((?:[^"\\]|\\.)*)"/);
   if (match) return match[1].replace(/\\"/g, '"');
 
+  const matchTruncated = text.match(/"root_cause"\s*:\s*"((?:[^"\\]|\\.)*)$/);
+  if (matchTruncated) return matchTruncated[1].replace(/\\"/g, '"');
+
   return text;
 }

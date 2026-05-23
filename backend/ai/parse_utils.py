@@ -37,7 +37,12 @@ def _try_parse_json(text: str) -> dict[str, Any] | None:
 
 def _regex_field(text: str, key: str) -> str | None:
     match = re.search(rf'"{key}"\s*:\s*"((?:[^"\\]|\\.)*)"', text, re.DOTALL)
-    return match.group(1).replace('\\"', '"') if match else None
+    if match:
+        return match.group(1).replace('\\"', '"')
+    match = re.search(rf'"{key}"\s*:\s*"((?:[^"\\]|\\.)*)$', text, re.DOTALL)
+    if match:
+        return match.group(1).replace('\\"', '"')
+    return None
 
 
 def parse_investigation_response(raw: str) -> dict[str, Any]:
