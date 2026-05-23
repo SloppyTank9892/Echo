@@ -7,11 +7,6 @@ import { Card } from "@/components/ui/Card";
 import type { ChatMessage } from "@/types";
 import { cn } from "@/utils/cn";
 
-const SUGGESTIONS = [
-  "Why did the payment API fail?",
-  "Which service is unstable right now?",
-  "Summarize the most recent incident and what we should do first.",
-];
 
 export function Chat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -29,16 +24,16 @@ export function Chat() {
         const live = data.available && data.verified !== false;
         setAiReady(live);
         setAiModel(data.model);
-        setMessages([
-          {
-            role: "assistant",
-            content: live
-              ? `ECHO (${data.model}) — detailed answers from live logs, metrics, and incidents. Run a simulation first, then ask your question.`
-              : data.available
+        if (!live) {
+          setMessages([
+            {
+              role: "assistant",
+              content: data.available
                 ? `Gemini key is set but the model could not be reached (${data.error || "check GEMINI_MODEL"}). Set \`GEMINI_MODEL=gemini-2.5-flash\` in backend/.env and restart.`
                 : "**Gemini is not connected.** Add `GEMINI_API_KEY` to `backend/.env` and restart the API server.",
-          },
-        ]);
+            },
+          ]);
+        }
       })
       .catch(() => {
         setAiReady(false);
@@ -114,19 +109,6 @@ export function Chat() {
           retry in ~1 minute.
         </div>
       )}
-
-      <div className="flex flex-wrap gap-2">
-        {SUGGESTIONS.map((s) => (
-          <button
-            key={s}
-            onClick={() => send(s)}
-            disabled={loading}
-            className="rounded-full border border-echo-border bg-echo-card px-3 py-1 text-xs text-slate-400 hover:border-cyan-500/40 hover:text-cyan-400 disabled:opacity-50"
-          >
-            {s}
-          </button>
-        ))}
-      </div>
 
       <Card className="flex flex-1 flex-col overflow-hidden">
         <div className="flex-1 space-y-4 overflow-y-auto p-2">
