@@ -81,6 +81,11 @@ async def simulate(body: SimulateRequest):
     return result
 
 
+@router.get("/chat/status")
+async def chat_status():
+    return chat_service.ai_status()
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(body: ChatRequest):
-    return await chat_service.reply(body.message, body.incident_id)
+    return await chat_service.reply(body.message, body.incident_id, body.history)

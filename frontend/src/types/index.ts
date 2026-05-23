@@ -59,7 +59,19 @@ export interface Alert {
   incident_id: string;
 }
 
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface ChatResponse {
   reply: string;
   sources: string[];
+  ai_powered: boolean;
+}
+
+export interface ChatStatus {
+  available: boolean;
+  model: string | null;
+  error: string | null;
 }

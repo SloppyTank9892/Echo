@@ -1,42 +1,64 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Bot, Send, User } from "lucide-react";
+import { Bot, Send, Sparkles, User } from "lucide-react";
 import { api } from "@/services/api";
 import { Card } from "@/components/ui/Card";
+import type { ChatMessage } from "@/types";
 import { cn } from "@/utils/cn";
-
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-}
 
 const SUGGESTIONS = [
   "Why did the payment API fail?",
   "Which service is unstable right now?",
-  "Show incidents from the last 10 minutes.",
+  "Summarize the most recent incident and what we should do first.",
 ];
 
 export function Chat() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content:
-        "I'm ECHO, your SRE copilot. Ask about failures, service health, or recent incidents. Trigger a simulation first for the best demo experience.",
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [aiReady, setAiReady] = useState<boolean | null>(null);
+  const [aiModel, setAiModel] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    api
+      .chatStatus()
+      .then(({ data }) => {
+        setAiReady(data.available);
+        setAiModel(data.model);
+        setMessages([
+          {
+            role: "assistant",
+            content: data.available
+              ? `I'm ECHO, powered by **${data.model}**. I use live logs, metrics, and incidents to answer your questions. Trigger a simulation first, then ask me anything about the outage.`
+              : "**Gemini is not connected.** Add `GEMINI_API_KEY` to `backend/.env` and restart the API server. Get a key at https://aistudio.google.com/apikey",
+          },
+        ]);
+      })
+      .catch(() => {
+        setAiReady(false);
+        setMessages([
+          {
+            role: "assistant",
+            content: "Cannot reach the backend. Start the API server on port 8000 first.",
+          },
+        ]);
+      });
+  }, []);
 
   const send = async (text: string) => {
     if (!text.trim() || loading) return;
     const userMsg = text.trim();
     setInput("");
-    setMessages((m) => [...m, { role: "user", content: userMsg }]);
+    const nextMessages: ChatMessage[] = [...messages, { role: "user", content: userMsg }];
+    setMessages(nextMessages);
     setLoading(true);
+
     try {
-      const { data } = await api.chat(userMsg);
+      const history = messages.filter((m) => m.role === "user" || m.role === "assistant");
+      const { data } = await api.chat(userMsg, history);
       setMessages((m) => [...m, { role: "assistant", content: data.reply }]);
+      if (!data.ai_powered) setAiReady(false);
     } catch {
       setMessages((m) => [
         ...m,
@@ -52,15 +74,31 @@ export function Chat() {
     <div className="mx-auto flex h-[calc(100vh-3rem)] max-w-3xl flex-col space-y-4">
       <header>
         <h1 className="text-2xl font-bold text-white">AI Incident Assistant</h1>
-        <p className="text-sm text-slate-500">Natural language debugging & explanations</p>
+        <p className="text-sm text-slate-500">
+          Powered by Google Gemini — answers use live system context
+        </p>
       </header>
+
+      {aiReady === true && aiModel && (
+        <div className="flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-300">
+          <Sparkles className="h-3.5 w-3.5" />
+          Gemini active ({aiModel})
+        </div>
+      )}
+      {aiReady === false && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+          Set <code className="text-amber-200">GEMINI_API_KEY</code> in backend/.env and restart
+          uvicorn to enable real AI responses.
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {SUGGESTIONS.map((s) => (
           <button
             key={s}
             onClick={() => send(s)}
-            className="rounded-full border border-echo-border bg-echo-card px-3 py-1 text-xs text-slate-400 hover:border-cyan-500/40 hover:text-cyan-400"
+            disabled={loading}
+            className="rounded-full border border-echo-border bg-echo-card px-3 py-1 text-xs text-slate-400 hover:border-cyan-500/40 hover:text-cyan-400 disabled:opacity-50"
           >
             {s}
           </button>
@@ -79,14 +117,20 @@ export function Chat() {
               <div
                 className={cn(
                   "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
-                  msg.role === "assistant" ? "bg-cyan-500/20 text-cyan-400" : "bg-slate-700 text-slate-300"
+                  msg.role === "assistant"
+                    ? "bg-cyan-500/20 text-cyan-400"
+                    : "bg-slate-700 text-slate-300"
                 )}
               >
-                {msg.role === "assistant" ? <Bot className="h-4 w-4" /> : <User className="h-4 w-4" />}
+                {msg.role === "assistant" ? (
+                  <Bot className="h-4 w-4" />
+                ) : (
+                  <User className="h-4 w-4" />
+                )}
               </div>
               <div
                 className={cn(
-                  "max-w-[85%] rounded-xl px-4 py-2.5 text-sm leading-relaxed",
+                  "max-w-[85%] whitespace-pre-wrap rounded-xl px-4 py-2.5 text-sm leading-relaxed",
                   msg.role === "assistant"
                     ? "bg-slate-800/80 text-slate-300"
                     : "bg-cyan-600/20 text-slate-200"
@@ -97,7 +141,7 @@ export function Chat() {
             </motion.div>
           ))}
           {loading && (
-            <p className="text-center text-xs text-slate-500">ECHO is analyzing…</p>
+            <p className="text-center text-xs text-cyan-500/80">Gemini is analyzing live context…</p>
           )}
           <div ref={bottomRef} />
         </div>
@@ -113,7 +157,8 @@ export function Chat() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask about incidents, services, or logs…"
-            className="flex-1 rounded-lg border border-echo-border bg-slate-900/50 px-4 py-2.5 text-sm outline-none focus:border-cyan-500/50"
+            disabled={loading}
+            className="flex-1 rounded-lg border border-echo-border bg-slate-900/50 px-4 py-2.5 text-sm outline-none focus:border-cyan-500/50 disabled:opacity-50"
           />
           <button
             type="submit"

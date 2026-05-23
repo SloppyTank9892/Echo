@@ -76,11 +76,18 @@ class SimulateRequest(BaseModel):
     event_type: str
 
 
+class ChatMessage(BaseModel):
+    role: str  # "user" | "assistant"
+    content: str
+
+
 class ChatRequest(BaseModel):
     message: str
     incident_id: Optional[str] = None
+    history: list[ChatMessage] = Field(default_factory=list)
 
 
 class ChatResponse(BaseModel):
     reply: str
     sources: list[str] = Field(default_factory=list)
+    ai_powered: bool = True
