@@ -163,11 +163,11 @@ class ChatService:
         prefix = ""
         if result.error_code == "quota_exceeded":
             prefix = "_Gemini quota reached — answer from live data:_\n\n"
-        elif result.user_message:
+        elif result.error_code not in ("api_error", "empty_response") and result.user_message:
             prefix = f"_{result.user_message}_\n\n"
 
         return ChatResponse(
-            reply=f"{prefix}{fallback}".strip(),
+            reply=fallback if result.error_code == "api_error" else f"{prefix}{fallback}".strip(),
             sources=sources + ["local_fallback"],
             ai_powered=False,
             error_code=result.error_code,

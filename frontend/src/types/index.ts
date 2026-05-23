@@ -75,4 +75,5 @@ export interface ChatStatus {
   available: boolean;
   model: string | null;
   error: string | null;
+  verified?: boolean;
 }

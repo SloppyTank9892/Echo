@@ -25,14 +25,17 @@ export function Chat() {
     api
       .chatStatus()
       .then(({ data }) => {
-        setAiReady(data.available);
+        const live = data.available && data.verified !== false;
+        setAiReady(live);
         setAiModel(data.model);
         setMessages([
           {
             role: "assistant",
-            content: data.available
+            content: live
               ? `ECHO (${data.model}) — short, context-aware answers from live logs and incidents. Run a simulation first, then ask your question.`
-              : "**Gemini is not connected.** Add `GEMINI_API_KEY` to `backend/.env` and restart the API server. Get a key at https://aistudio.google.com/apikey",
+              : data.available
+                ? `Gemini key is set but the model could not be reached (${data.error || "check GEMINI_MODEL"}). Set \`GEMINI_MODEL=gemini-2.5-flash\` in backend/.env and restart.`
+                : "**Gemini is not connected.** Add `GEMINI_API_KEY` to `backend/.env` and restart the API server.",
           },
         ]);
       })
@@ -99,7 +102,7 @@ export function Chat() {
       {quotaWarning && (
         <div className="rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs text-orange-200">
           Gemini free-tier quota hit. Answers use live incident data. Add{" "}
-          <code className="text-orange-100">GEMINI_MODEL=gemini-1.5-flash</code> to backend/.env or
+          <code className="text-orange-100">GEMINI_MODEL=gemini-2.5-flash</code> to backend/.env or
           retry in ~1 minute.
         </div>
       )}

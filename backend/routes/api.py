@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from ai.gemini_client import gemini_client
 from models.schemas import (
     ChatRequest,
     ChatResponse,
@@ -83,7 +84,15 @@ async def simulate(body: SimulateRequest):
 
 @router.get("/chat/status")
 async def chat_status():
-    return chat_service.ai_status()
+    status = chat_service.ai_status()
+    if status.get("available"):
+        ping = await gemini_client.ping()
+        status["verified"] = bool(ping.text)
+        status["model"] = ping.model_used or status.get("model")
+        if not ping.text and ping.error_code:
+            status["verified"] = False
+            status["error"] = ping.user_message
+    return status
 
 
 @router.post("/chat", response_model=ChatResponse)

@@ -10,11 +10,12 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-# 1.5-flash first — free tier quota is often higher than 2.0-flash
+# Verified via list_models() — 1.5-flash is no longer available on v1beta
 MODEL_CANDIDATES = (
-    "gemini-1.5-flash",
+    "gemini-2.5-flash",
+    "gemini-flash-latest",
+    "gemini-2.0-flash-lite",
     "gemini-2.0-flash",
-    "gemini-1.5-pro",
 )
 
 Mode = Literal["chat", "analysis"]
@@ -36,14 +37,21 @@ def _is_quota_error(exc: BaseException) -> bool:
     )
 
 
+def _is_model_unavailable(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    return any(token in msg for token in ("404", "not found", "not supported"))
+
+
+def _should_try_next_model(exc: BaseException) -> bool:
+    return _is_quota_error(exc) or _is_model_unavailable(exc)
+
+
 def _friendly_error(exc: BaseException) -> tuple[str, str]:
-    """Returns (error_code, user_message)."""
     if _is_quota_error(exc):
         return (
             "quota_exceeded",
-            "Gemini free-tier quota is used up for now. Try again in a few minutes, "
-            "or switch to **gemini-1.5-flash** in `backend/.env` (`GEMINI_MODEL=gemini-1.5-flash`). "
-            "ECHO will still answer from live incident data below.",
+            "Gemini free-tier quota is used up for now. Try again in a few minutes. "
+            "ECHO will answer from live incident data below.",
         )
     if "api key" in str(exc).lower() or "invalid" in str(exc).lower():
         return ("invalid_key", "Invalid API key. Check `GEMINI_API_KEY` in `backend/.env`.")
@@ -64,30 +72,17 @@ class GeminiClient:
             import google.generativeai as genai
 
             genai.configure(api_key=settings.gemini_api_key)
-            preferred = getattr(settings, "gemini_model", "") or ""
-            candidates = (
-                [preferred] + [m for m in MODEL_CANDIDATES if m != preferred]
-                if preferred
-                else list(MODEL_CANDIDATES)
-            )
-            for name in candidates:
-                if not name:
-                    continue
-                try:
-                    genai.GenerativeModel(name)
-                    self._model_name = name
-                    self._init_error = None
-                    logger.info("Gemini model ready: %s", name)
-                    return
-                except Exception as exc:
-                    logger.warning("Model %s unavailable: %s", name, exc)
-            self._init_error = "No supported Gemini model could be initialized"
+            self._init_error = None
+            # Defer model pick to first successful generate; store preference only
+            preferred = (settings.gemini_model or MODEL_CANDIDATES[0]).strip()
+            self._model_name = preferred
+            logger.info("Gemini configured; preferred model: %s", preferred)
         except Exception as exc:
             self._init_error = str(exc)
 
     @property
     def available(self) -> bool:
-        return self._model_name is not None
+        return bool(settings.gemini_api_key) and self._init_error is None
 
     @property
     def status(self) -> dict[str, Any]:
@@ -98,11 +93,12 @@ class GeminiClient:
         }
 
     def _models_to_try(self) -> list[str]:
-        preferred = getattr(settings, "gemini_model", "") or ""
-        primary = self._model_name or MODEL_CANDIDATES[0]
-        ordered = [primary]
-        if preferred and preferred not in ordered:
-            ordered.insert(0, preferred)
+        preferred = (settings.gemini_model or "").strip()
+        ordered: list[str] = []
+        if preferred:
+            ordered.append(preferred)
+        if self._model_name and self._model_name not in ordered:
+            ordered.append(self._model_name)
         for m in MODEL_CANDIDATES:
             if m not in ordered:
                 ordered.append(m)
@@ -134,8 +130,6 @@ class GeminiClient:
         contents: list[dict[str, Any]],
         mode: Mode,
     ) -> str:
-        import google.generativeai as genai
-
         model = self._create_model(model_name, system)
         config = self._generation_config(mode)
         fn = getattr(model, "generate_content_async", None)
@@ -147,7 +141,18 @@ class GeminiClient:
                 None,
                 lambda: model.generate_content(contents, generation_config=config),
             )
+        if not response.candidates:
+            raise ValueError("No candidates in Gemini response")
         return (response.text or "").strip()
+
+    async def ping(self) -> GeminiResult:
+        """Lightweight call to verify API + pick a working model."""
+        return await self.chat(
+            system="Reply with exactly: ok",
+            history=[],
+            user_message="ping",
+            mode="chat",
+        )
 
     async def generate(self, system: str, user: str, mode: Mode = "chat") -> str:
         result = await self.chat(system=system, history=[], user_message=user, mode=mode)
@@ -178,6 +183,8 @@ class GeminiClient:
         contents.append({"role": "user", "parts": [user_message]})
 
         last_quota = False
+        last_error: BaseException | None = None
+
         for model_name in self._models_to_try():
             try:
                 text = await self._generate_with_model(model_name, system, contents, mode)
@@ -185,9 +192,11 @@ class GeminiClient:
                     self._model_name = model_name
                     return GeminiResult(text=text, model_used=model_name)
             except Exception as exc:
+                last_error = exc
                 logger.warning("Gemini %s failed: %s", model_name, exc)
-                if _is_quota_error(exc):
-                    last_quota = True
+                if _should_try_next_model(exc):
+                    if _is_quota_error(exc):
+                        last_quota = True
                     continue
                 code, msg = _friendly_error(exc)
                 return GeminiResult(error_code=code, user_message=msg)
@@ -195,6 +204,12 @@ class GeminiClient:
         if last_quota:
             code, msg = _friendly_error(Exception("429 quota"))
             return GeminiResult(error_code=code, user_message=msg)
+
+        if last_error and _is_model_unavailable(last_error):
+            return GeminiResult(
+                error_code="model_unavailable",
+                user_message="No Gemini model available. Update GEMINI_MODEL in backend/.env.",
+            )
 
         return GeminiResult(
             error_code="empty_response",
