@@ -6,9 +6,16 @@ class EchoWebSocket {
   private reconnectTimer?: ReturnType<typeof setTimeout>;
 
   connect() {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = import.meta.env.DEV ? "127.0.0.1:8000" : window.location.host;
-    const url = `${protocol}//${host}/ws`;
+    const backendUrl = import.meta.env.VITE_API_URL;
+    let url: string;
+    if (backendUrl) {
+      const cleanUrl = backendUrl.replace(/^http/, "ws");
+      url = `${cleanUrl}/ws`;
+    } else {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const host = import.meta.env.DEV ? "127.0.0.1:8000" : window.location.host;
+      url = `${protocol}//${host}/ws`;
+    }
 
     this.ws = new WebSocket(url);
 

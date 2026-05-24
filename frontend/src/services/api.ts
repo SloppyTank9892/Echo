@@ -9,8 +9,9 @@ import type {
   SystemOverview,
 } from "@/types";
 
-const client = axios.create({ baseURL: "/api", timeout: 30000 });
-const chatClient = axios.create({ baseURL: "/api", timeout: 120000 });
+const API_URL = import.meta.env.VITE_API_URL || "/api";
+const client = axios.create({ baseURL: API_URL, timeout: 30000 });
+const chatClient = axios.create({ baseURL: API_URL, timeout: 120000 });
 
 export const api = {
   health: () => client.get("/health"),
